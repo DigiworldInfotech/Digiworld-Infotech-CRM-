@@ -1,0 +1,168 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: uid, email, role, name, photoURL
+    //
+    // Collection: leads
+    // Fields: title, status, source, assignedTo, contactName, contactEmail, contactPhone, notes, followUpDate, createdAt
+    //
+    // Collection: clients
+    // Fields: name, gstin, address, state, stateCode, contactPerson, email, phone, accountManager, status
+    //
+    // Collection: services
+    // Fields: name, hsn, gstRate, price, isRecurring
+    //
+    // Collection: invoices
+    // Fields: invoiceNumber, clientId, clientName, items, subtotal, cgst, sgst, igst, totalGst, totalAmount, status, dueDate, createdAt, isRecurring, recurringInterval
+    //
+    // Collection: payments
+    // Fields: invoiceId, amount, date, mode, notes
+    //
+    // Collection: activityLogs
+    // Fields: userId, userName, action, details, timestamp
+    //
+    // Collection: settings
+    // Fields: name, address, gstin, state, stateCode, email, phone
+    //
+    // Collection: banks
+    // Fields: bankName, accountName, accountNumber, ifsc, branch, balance
+    //
+    // Collection: expenses
+    // Fields: category, amount, date, vendor, mode, bankId, notes, gstAmount, isGstClaimable
+    //
+    // Collection: email_templates
+    // Fields: type, subject, body, lastUpdated
+    //
+    // Collection: notifications
+    // Fields: userId, title, message, type, isRead, createdAt, link
+    //
+    // Collection: projects
+    // Fields: clientId, name, description, status, startDate, endDate, progress, budget, createdAt
+    //
+    // Collection: communications
+    // Fields: clientId, type, subject, content, date, userId, userName
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'admin'] ||
+          (request.auth.token.email == "admin@digiworldinfotech.in" && request.auth.token.email_verified == true));
+    }
+
+    function isAccountant() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'accountant';
+    }
+
+    function isSales() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sales';
+    }
+
+    function isClient() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client';
+    }
+
+    function getClientUID() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+    }
+
+    match /leads/{leadId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSales() || isAccountant());
+      allow write: if isAuthenticated() && (isAdmin() || isSales());
+    }
+
+    match /clients/{clientId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSales() || isAccountant() || getClientUID() == clientId);
+      allow write: if isAuthenticated() && (isAdmin() || isSales());
+    }
+
+    match /services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isAdmin();
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && (isAdmin() || isAccountant() || isSales() || getClientUID() == resource.data.clientId);
+      allow write: if isAuthenticated() && (isAdmin() || isAccountant());
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (isAdmin() || isAccountant());
+      allow write: if isAuthenticated() && (isAdmin() || isAccountant());
+    }
+
+    match /activityLogs/{logId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create: if isAuthenticated();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isAdmin();
+    }
+
+    match /banks/{bankId} {
+      allow read: if isAuthenticated() && (isAdmin() || isAccountant());
+      allow write: if isAuthenticated() && (isAdmin() || isAccountant());
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated() && (isAdmin() || isAccountant());
+      allow write: if isAuthenticated() && (isAdmin() || isAccountant());
+    }
+
+    match /email_templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isAdmin();
+    }
+    
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSales() || isAccountant() || getClientUID() == resource.data.clientId);
+      allow write: if isAuthenticated() && (isAdmin() || isSales());
+    }
+
+    match /communications/{commId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSales() || isAccountant() || getClientUID() == resource.data.clientId);
+      allow write: if isAuthenticated() && (isAdmin() || isSales());
+    }
+  }
+}

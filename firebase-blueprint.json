@@ -1,0 +1,256 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with role-based access.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "sales", "accountant", "client"] },
+        "name": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "clientId": { "type": "string", "description": "Associated Client ID for client users" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "CRM Lead tracking.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "contacted", "meeting_scheduled", "proposal_sent", "negotiation", "won", "lost"] },
+        "source": { "type": "string" },
+        "assignedTo": { "type": "string", "description": "User UID" },
+        "contactName": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "notes": { "type": "string" },
+        "followUpDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "status", "createdAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Customer Master data.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "gstin": { "type": "string" },
+        "address": { "type": "string" },
+        "state": { "type": "string" },
+        "stateCode": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "udyamAdhar": { "type": "string" },
+        "accountManager": { "type": "string", "description": "User UID" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["name", "status"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Service definitions for billing.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "hsn": { "type": "string" },
+        "gstRate": { "type": "number" },
+        "price": { "type": "number" },
+        "isRecurring": { "type": "boolean" }
+      },
+      "required": ["name", "gstRate", "price"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "GST Invoice data.",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "serviceId": { "type": "string" },
+              "serviceName": { "type": "string" },
+              "hsn": { "type": "string" },
+              "qty": { "type": "number" },
+              "rate": { "type": "number" },
+              "gstRate": { "type": "number" },
+              "amount": { "type": "number" }
+            }
+          }
+        },
+        "subtotal": { "type": "number" },
+        "cgst": { "type": "number" },
+        "sgst": { "type": "number" },
+        "igst": { "type": "number" },
+        "totalGst": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "sent", "overdue", "paid", "cancelled"] },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isRecurring": { "type": "boolean" },
+        "recurringInterval": { "type": "string", "enum": ["monthly", "quarterly", "yearly"] },
+        "lastRecurringDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["invoiceNumber", "clientId", "totalAmount", "status", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment records.",
+      "type": "object",
+      "properties": {
+        "invoiceId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "mode": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["invoiceId", "amount", "date"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit trail.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "action", "timestamp"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "Global agency settings.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "gstin": { "type": "string" },
+        "state": { "type": "string" },
+        "stateCode": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "upiId": { "type": "string" },
+        "bankDetails": { "type": "string" },
+        "termsAndConditions": { "type": "string" },
+        "paymentUrl": { "type": "string" }
+      }
+    },
+    "Bank": {
+      "title": "Bank",
+      "description": "Bank account details.",
+      "type": "object",
+      "properties": {
+        "bankName": { "type": "string" },
+        "accountName": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "ifsc": { "type": "string" },
+        "branch": { "type": "string" },
+        "balance": { "type": "number" }
+      },
+      "required": ["bankName", "accountNumber", "balance"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Business expenses.",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "vendor": { "type": "string" },
+        "mode": { "type": "string" },
+        "bankId": { "type": "string" },
+        "notes": { "type": "string" },
+        "gstAmount": { "type": "number" },
+        "isGstClaimable": { "type": "boolean" }
+      },
+      "required": ["category", "amount", "date", "mode"]
+    },
+    "EmailTemplate": {
+      "title": "EmailTemplate",
+      "description": "Custom email templates.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["welcome", "invoice", "recurring", "followup"] },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "subject", "body"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notifications for users.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User UID" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "warning", "success", "error"] },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "link": { "type": "string" }
+      },
+      "required": ["userId", "title", "message", "type", "isRead", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Client project tracking.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["planning", "in_progress", "on_hold", "completed", "cancelled"] },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "progress": { "type": "number" },
+        "budget": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "name", "status", "startDate", "progress", "createdAt"]
+    },
+    "Communication": {
+      "title": "Communication",
+      "description": "Client communication history.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "type": { "type": "string", "enum": ["email", "call", "meeting", "note"] },
+        "subject": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" }
+      },
+      "required": ["clientId", "type", "subject", "content", "date", "userId"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "System users" },
+    "leads": { "schema": "Lead", "description": "CRM Leads" },
+    "clients": { "schema": "Client", "description": "Customer master" },
+    "services": { "schema": "Service", "description": "Billed services" },
+    "invoices": { "schema": "Invoice", "description": "GST Invoices" },
+    "payments": { "schema": "Payment", "description": "Payment transactions" },
+    "expenses": { "schema": "Expense", "description": "Business expenses" },
+    "banks": { "schema": "Bank", "description": "Bank accounts" },
+    "email_templates": { "schema": "EmailTemplate", "description": "Email templates" },
+    "notifications": { "schema": "Notification", "description": "In-app notifications" },
+    "activityLogs": { "schema": "ActivityLog", "description": "Audit logs" },
+    "settings": { "schema": "CompanySettings", "description": "Global config" },
+    "projects": { "schema": "Project", "description": "Client projects" },
+    "communications": { "schema": "Communication", "description": "Communication history" }
+  }
+}
