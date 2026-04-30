@@ -12,6 +12,8 @@ import {
   Package,
   Building2,
   Receipt,
+  UserCheck,
+  ClipboardCheck,
   Menu,
   X
 } from 'lucide-react';
@@ -36,9 +38,11 @@ const Sidebar: React.FC = () => {
 
   const navItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['super_admin', 'admin', 'sales', 'accountant'] },
+    { name: 'Team Members', icon: UserCheck, path: '/users', roles: ['super_admin'] },
     { name: 'CRM Leads', icon: Briefcase, path: '/leads', roles: ['super_admin', 'admin', 'sales'] },
     { name: 'Clients', icon: Users, path: '/clients', roles: ['super_admin', 'admin', 'sales', 'accountant'] },
     { name: 'Services', icon: Package, path: '/services', roles: ['super_admin', 'admin'] },
+    { name: 'Estimates', icon: ClipboardCheck, path: '/estimates', roles: ['super_admin', 'admin', 'sales'] },
     { name: 'Invoices', icon: FileText, path: '/invoices', roles: ['super_admin', 'admin', 'accountant', 'sales'] },
     { name: 'Payments', icon: CreditCard, path: '/payments', roles: ['super_admin', 'admin', 'accountant'] },
     { name: 'Expenses', icon: Receipt, path: '/expenses', roles: ['super_admin', 'admin', 'accountant'] },

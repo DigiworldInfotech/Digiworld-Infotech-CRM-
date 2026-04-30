@@ -8,17 +8,19 @@ import {
   MapPin, 
   FileText, 
   MoreVertical,
+  Edit,
+  Trash2,
   XCircle,
   Building2,
   ShieldCheck
 } from 'lucide-react';
-import { subscribeToCollection, createDocument, updateDocument } from '../services/firestore';
+import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from '../services/firestore';
 import { sendWelcomeEmail } from '../services/email';
 import { Client } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import ClientDashboard from './ClientDashboard';
-import { ArrowLeft, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Users } from 'lucide-react';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -27,8 +29,10 @@ function cn(...inputs: ClassValue[]) {
 const Clients: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToCollection<Client>('clients', [], setClients);
@@ -37,13 +41,13 @@ const Clients: React.FC = () => {
 
   const filteredClients = clients.filter(client => 
     client.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    client.gstin.toLowerCase().includes(searchTerm.toLowerCase())
+    (client.gstin && client.gstin.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleAddClient = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveClient = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const newClient = {
+    const clientData = {
       name: formData.get('name') as string,
       gstin: formData.get('gstin') as string,
       address: formData.get('address') as string,
@@ -53,13 +57,32 @@ const Clients: React.FC = () => {
       email: formData.get('email') as string,
       phone: formData.get('phone') as string,
       udyamAdhar: formData.get('udyamAdhar') as string,
-      status: 'active' as const,
-      accountManager: '',
+      status: (editingClient?.status || 'active') as 'active' | 'inactive',
+      accountManager: editingClient?.accountManager || '',
     };
 
-    await createDocument('clients', newClient);
-    await sendWelcomeEmail(newClient.email, newClient.name);
+    if (editingClient) {
+      await updateDocument('clients', editingClient.id!, clientData);
+    } else {
+      await createDocument('clients', clientData);
+      await sendWelcomeEmail(clientData.email, clientData.name);
+    }
+    
     setIsModalOpen(false);
+    setEditingClient(null);
+  };
+
+  const handleEdit = (client: Client) => {
+    setEditingClient(client);
+    setIsModalOpen(true);
+    setActiveMenu(null);
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete the client "${name}"? This will not delete their invoices but they will no longer be linked.`)) {
+      await deleteDocument('clients', id);
+    }
+    setActiveMenu(null);
   };
 
   if (selectedClientId) {
@@ -85,7 +108,10 @@ const Clients: React.FC = () => {
           <p className="text-slate-500">Manage your customer master and billing information.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingClient(null);
+            setIsModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
         >
           <Plus size={20} />
@@ -169,9 +195,37 @@ const Clients: React.FC = () => {
                   <FileText size={16} />
                   Invoices
                 </button>
-                <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all">
-                  <MoreVertical size={18} />
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setActiveMenu(activeMenu === client.id ? null : (client.id || null))}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                  
+                  {activeMenu === client.id && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setActiveMenu(null)}
+                      />
+                      <div className="absolute right-0 bottom-full mb-1 w-32 bg-white rounded-xl shadow-xl border border-slate-100 z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-200">
+                        <button 
+                          onClick={() => handleEdit(client)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                        >
+                          <Edit size={14} /> Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(client.id!, client.name)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -193,53 +247,130 @@ const Clients: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Add New Client</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <h2 className="text-xl font-bold text-slate-900">{editingClient ? 'Edit Client' : 'Add New Client'}</h2>
+              <button 
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingClient(null);
+                }} 
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+              >
                 <XCircle size={24} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleAddClient} className="p-6 space-y-6">
+            <form onSubmit={handleSaveClient} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Company Name</label>
-                  <input name="name" required type="text" placeholder="e.g. TechCorp Solutions Pvt Ltd" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="name" 
+                    required 
+                    type="text" 
+                    defaultValue={editingClient?.name}
+                    placeholder="e.g. TechCorp Solutions Pvt Ltd" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">GSTIN</label>
-                  <input name="gstin" type="text" placeholder="27AAAAA0000A1Z5" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="gstin" 
+                    type="text" 
+                    defaultValue={editingClient?.gstin}
+                    placeholder="27AAAAA0000A1Z5" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Udyam Adhar</label>
-                  <input name="udyamAdhar" type="text" placeholder="UDYAM-XX-00-0000000" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="udyamAdhar" 
+                    type="text" 
+                    defaultValue={editingClient?.udyamAdhar}
+                    placeholder="UDYAM-XX-00-0000000" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Contact Person</label>
-                  <input name="contactPerson" required type="text" placeholder="John Doe" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="contactPerson" 
+                    required 
+                    type="text" 
+                    defaultValue={editingClient?.contactPerson}
+                    placeholder="John Doe" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
-                  <input name="email" required type="email" placeholder="billing@techcorp.com" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="email" 
+                    required 
+                    type="email" 
+                    defaultValue={editingClient?.email}
+                    placeholder="billing@techcorp.com" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone Number</label>
-                  <input name="phone" required type="tel" placeholder="+91 98765 43210" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="phone" 
+                    required 
+                    type="tel" 
+                    defaultValue={editingClient?.phone}
+                    placeholder="+91 98765 43210" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Billing Address</label>
-                  <textarea name="address" required rows={2} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="House No, Street, Area..."></textarea>
+                  <textarea 
+                    name="address" 
+                    required 
+                    rows={2} 
+                    defaultValue={editingClient?.address}
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                    placeholder="House No, Street, Area..."></textarea>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">State</label>
-                  <input name="state" required type="text" placeholder="Maharashtra" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="state" 
+                    required 
+                    type="text" 
+                    defaultValue={editingClient?.state}
+                    placeholder="Maharashtra" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">State Code</label>
-                  <input name="stateCode" required type="text" placeholder="27" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="stateCode" 
+                    required 
+                    type="text" 
+                    defaultValue={editingClient?.stateCode}
+                    placeholder="27" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
               </div>
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-all">Cancel</button>
-                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">Save Client</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingClient(null);
+                  }} 
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">
+                  {editingClient ? 'Update Client' : 'Save Client'}
+                </button>
               </div>
             </form>
           </div>
@@ -249,5 +380,4 @@ const Clients: React.FC = () => {
   );
 };
 
-import { Users } from 'lucide-react';
 export default Clients;

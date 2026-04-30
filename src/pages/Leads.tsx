@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Filter, MoreVertical, Mail, Phone, Calendar, User, CheckCircle2, XCircle, Clock, ChevronRight, Video, AlertCircle, Briefcase, Bell } from 'lucide-react';
-import { subscribeToCollection, createDocument, updateDocument, getDocument } from '../services/firestore';
+import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Mail, Phone, Calendar, User, CheckCircle2, XCircle, Clock, ChevronRight, Video, AlertCircle, Briefcase, Bell } from 'lucide-react';
+import { subscribeToCollection, createDocument, updateDocument, getDocument, deleteDocument } from '../services/firestore';
 import { Lead, UserProfile, Notification } from '../types';
-import { format, isAfter, isBefore, addDays, startOfDay, subHours } from 'date-fns';
+import { format, isAfter, isBefore, addDays, startOfDay, subHours, isSameDay, isTomorrow } from 'date-fns';
 import { sendFollowUpEmail } from '../services/email';
 import { auth } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
@@ -15,10 +15,13 @@ function cn(...inputs: ClassValue[]) {
 const Leads: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [followUpModalLead, setFollowUpModalLead] = useState<Lead | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterSource, setFilterSource] = useState<string>('all');
   const [isNotifying, setIsNotifying] = useState<string | null>(null);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToCollection<Lead>('leads', [], setLeads);
@@ -28,8 +31,9 @@ const Leads: React.FC = () => {
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = lead.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          lead.contactName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || lead.status === filterStatus;
-    return matchesSearch && matchesFilter;
+    const matchesStatus = filterStatus === 'all' || lead.status === filterStatus;
+    const matchesSource = filterSource === 'all' || lead.source === filterSource;
+    return matchesSearch && matchesStatus && matchesSource;
   });
 
   useEffect(() => {
@@ -87,26 +91,45 @@ const Leads: React.FC = () => {
     }
   }, [leads]);
 
-  const handleAddLead = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveLead = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const followUpDate = formData.get('followUpDate') as string;
     
-    const newLead = {
+    const leadData = {
       title: formData.get('title') as string,
       contactName: formData.get('contactName') as string,
       contactEmail: formData.get('contactEmail') as string,
       contactPhone: formData.get('contactPhone') as string,
-      status: 'new' as const,
+      status: (editingLead?.status || 'new') as Lead['status'],
       source: formData.get('source') as string,
       notes: formData.get('notes') as string,
       followUpDate: followUpDate ? new Date(followUpDate).toISOString() : undefined,
-      createdAt: new Date().toISOString(),
-      assignedTo: '', // In a real app, assign to current user or select
+      createdAt: editingLead?.createdAt || new Date().toISOString(),
+      assignedTo: editingLead?.assignedTo || '',
     };
 
-    await createDocument('leads', newLead);
+    if (editingLead) {
+      await updateDocument('leads', editingLead.id!, leadData);
+    } else {
+      await createDocument('leads', leadData);
+    }
+    
     setIsModalOpen(false);
+    setEditingLead(null);
+  };
+
+  const handleEdit = (lead: Lead) => {
+    setEditingLead(lead);
+    setIsModalOpen(true);
+    setActiveMenu(null);
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (confirm(`Are you sure you want to delete the lead "${title}"?`)) {
+      await deleteDocument('leads', id);
+    }
+    setActiveMenu(null);
   };
 
   const updateLeadStatus = async (id: string, status: Lead['status']) => {
@@ -202,7 +225,10 @@ const Leads: React.FC = () => {
           <p className="text-slate-500">Manage your sales pipeline and track prospects.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingLead(null);
+            setIsModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
         >
           <Plus size={20} />
@@ -223,7 +249,14 @@ const Leads: React.FC = () => {
                 <div>
                   <h4 className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors truncate max-w-[150px]">{lead.title}</h4>
                   <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                    <Clock size={12} /> {format(new Date(lead.followUpDate!), 'dd MMM, hh:mm a')}
+                    <Clock size={12} /> 
+                    {isSameDay(new Date(lead.followUpDate!), new Date()) ? (
+                      <span className="text-amber-600 font-bold">Today</span>
+                    ) : isTomorrow(new Date(lead.followUpDate!)) ? (
+                      <span className="text-amber-600 font-semibold">Tomorrow</span>
+                    ) : (
+                      format(new Date(lead.followUpDate!), 'dd MMM')
+                    )}, {format(new Date(lead.followUpDate!), 'hh:mm a')}
                   </p>
                 </div>
                 <button 
@@ -266,6 +299,23 @@ const Leads: React.FC = () => {
             <option value="won">Won</option>
             <option value="lost">Lost</option>
           </select>
+          <select 
+            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-600"
+            value={filterSource}
+            onChange={(e) => setFilterSource(e.target.value)}
+          >
+            <option value="all">All Sources</option>
+            <option value="website">Website</option>
+            <option value="referral">Referral</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="cold_call">Cold Call</option>
+            <option value="google_my_business">Google My Business</option>
+            <option value="youtube">YouTube</option>
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="other">Other</option>
+          </select>
           <button className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 transition-all">
             <Filter size={20} />
           </button>
@@ -290,7 +340,14 @@ const Leads: React.FC = () => {
                   <User size={24} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{lead.title}</h3>
+                  <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+                    {lead.title}
+                    {isSoon && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                        <Clock size={10} /> {isSameDay(new Date(lead.followUpDate!), new Date()) ? 'Due Today' : 'Follow-up Due'}
+                      </span>
+                    )}
+                  </h3>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                     <span className="text-sm font-medium text-slate-600 flex items-center gap-1">
                       <User size={14} /> {lead.contactName}
@@ -321,13 +378,16 @@ const Leads: React.FC = () => {
                   >
                     <Mail size={18} />
                   </a>
-                  <button 
+                  <a 
+                    href="https://calendar.app.google/EgR8zWarU7wkkVJP9"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => updateLeadStatus(lead.id, 'meeting_scheduled')}
                     className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-all border border-purple-100"
-                    title="Schedule Meeting"
+                    title="Schedule Meeting via Google Calendar"
                   >
                     <Video size={18} />
-                  </button>
+                  </a>
                   <button 
                     onClick={() => setFollowUpModalLead(lead)}
                     className={cn(
@@ -379,9 +439,37 @@ const Leads: React.FC = () => {
                     <option value="won">Won</option>
                     <option value="lost">Lost</option>
                   </select>
-                  <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all">
-                    <MoreVertical size={18} />
-                  </button>
+                  <div className="relative">
+                    <button 
+                      onClick={() => setActiveMenu(activeMenu === lead.id ? null : (lead.id || null))}
+                      className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                    >
+                      <MoreVertical size={18} />
+                    </button>
+                    
+                    {activeMenu === lead.id && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setActiveMenu(null)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 w-32 bg-white rounded-xl shadow-xl border border-slate-100 z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                          <button 
+                            onClick={() => handleEdit(lead)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                          >
+                            <Edit size={14} /> Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(lead.id!, lead.title)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -419,55 +507,120 @@ const Leads: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Add New Lead</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <h2 className="text-xl font-bold text-slate-900">{editingLead ? 'Edit Lead' : 'Add New Lead'}</h2>
+              <button 
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingLead(null);
+                }} 
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+              >
                 <XCircle size={24} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleAddLead} className="p-6 space-y-4">
+            <form onSubmit={handleSaveLead} className="p-6 space-y-4">
               <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Lead Title / Requirement</label>
-                  <input name="title" required type="text" placeholder="e.g. SEO Project for TechCorp" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="title" 
+                    required 
+                    type="text" 
+                    defaultValue={editingLead?.title}
+                    placeholder="e.g. SEO Project for TechCorp" 
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Contact Name</label>
-                    <input name="contactName" required type="text" placeholder="John Doe" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                    <input 
+                      name="contactName" 
+                      required 
+                      type="text" 
+                      defaultValue={editingLead?.contactName}
+                      placeholder="John Doe" 
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-                    <input name="contactPhone" required type="tel" placeholder="+91 98765 43210" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                    <input 
+                      name="contactPhone" 
+                      required 
+                      type="tel" 
+                      defaultValue={editingLead?.contactPhone}
+                      placeholder="+91 98765 43210" 
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                    />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-                  <input name="contactEmail" required type="email" placeholder="john@example.com" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="contactEmail" 
+                    required 
+                    type="email" 
+                    defaultValue={editingLead?.contactEmail}
+                    placeholder="john@example.com" 
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Lead Source</label>
-                    <select name="source" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+                    <select 
+                      name="source" 
+                      defaultValue={editingLead?.source || 'website'}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                    >
                       <option value="website">Website</option>
                       <option value="referral">Referral</option>
                       <option value="linkedin">LinkedIn</option>
                       <option value="cold_call">Cold Call</option>
+                      <option value="google_my_business">Google My Business</option>
+                      <option value="youtube">YouTube</option>
+                      <option value="facebook">Facebook</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="whatsapp">WhatsApp</option>
                       <option value="other">Other</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Follow-up Date</label>
-                    <input name="followUpDate" type="datetime-local" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                    <input 
+                      name="followUpDate" 
+                      type="datetime-local" 
+                      defaultValue={editingLead?.followUpDate ? format(new Date(editingLead.followUpDate), "yyyy-MM-dd'T'HH:mm") : ''}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                    />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-                  <textarea name="notes" rows={3} className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Initial requirements..."></textarea>
+                  <textarea 
+                    name="notes" 
+                    rows={3} 
+                    defaultValue={editingLead?.notes}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                    placeholder="Initial requirements..."
+                  ></textarea>
                 </div>
               </div>
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-all">Cancel</button>
-                <button type="submit" className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">Create Lead</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingLead(null);
+                  }} 
+                  className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">
+                  {editingLead ? 'Update Lead' : 'Create Lead'}
+                </button>
               </div>
             </form>
           </div>

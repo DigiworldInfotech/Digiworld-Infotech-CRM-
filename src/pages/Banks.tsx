@@ -6,22 +6,26 @@ import {
   CreditCard, 
   IndianRupee, 
   MoreVertical,
+  Edit,
+  Trash2,
   XCircle,
   Hash,
   MapPin,
   Receipt,
   ArrowUpCircle
 } from 'lucide-react';
-import { subscribeToCollection, createDocument, updateDocument } from '../services/firestore';
+import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from '../services/firestore';
 import { Bank, Expense } from '../types';
 import { format } from 'date-fns';
 
 const Banks: React.FC = () => {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToCollection<Bank>('banks', [], setBanks);
@@ -33,10 +37,10 @@ const Banks: React.FC = () => {
     bank.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddBank = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveBank = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const newBank = {
+    const bankData = {
       bankName: formData.get('bankName') as string,
       accountName: formData.get('accountName') as string,
       accountNumber: formData.get('accountNumber') as string,
@@ -45,8 +49,27 @@ const Banks: React.FC = () => {
       balance: parseFloat(formData.get('balance') as string || '0'),
     };
 
-    await createDocument('banks', newBank);
+    if (editingBank) {
+      await updateDocument('banks', editingBank.id!, bankData);
+    } else {
+      await createDocument('banks', bankData);
+    }
+    
     setIsModalOpen(false);
+    setEditingBank(null);
+  };
+
+  const handleEdit = (bank: Bank) => {
+    setEditingBank(bank);
+    setIsModalOpen(true);
+    setActiveMenu(null);
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete the bank account "${name}"?`)) {
+      await deleteDocument('banks', id);
+    }
+    setActiveMenu(null);
   };
 
   const handleAddExpense = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -91,7 +114,10 @@ const Banks: React.FC = () => {
           <p className="text-slate-500">Manage your agency bank accounts and balances.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingBank(null);
+            setIsModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
         >
           <Plus size={20} />
@@ -159,9 +185,37 @@ const Banks: React.FC = () => {
                 >
                   <Receipt size={14} /> Record Expense
                 </button>
-                <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all">
-                  <MoreVertical size={18} />
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setActiveMenu(activeMenu === bank.id ? null : (bank.id || null))}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                  
+                  {activeMenu === bank.id && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setActiveMenu(null)}
+                      />
+                      <div className="absolute right-0 bottom-full mt-1 w-32 bg-white rounded-xl shadow-xl border border-slate-100 z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                        <button 
+                          onClick={() => handleEdit(bank)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                        >
+                          <Edit size={14} /> Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(bank.id!, bank.bankName)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -183,41 +237,99 @@ const Banks: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Add Bank Account</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <h2 className="text-xl font-bold text-slate-900">{editingBank ? 'Edit Bank Account' : 'Add Bank Account'}</h2>
+              <button 
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingBank(null);
+                }} 
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+              >
                 <XCircle size={24} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleAddBank} className="p-6 space-y-5">
+            <form onSubmit={handleSaveBank} className="p-6 space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Bank Name</label>
-                <input name="bankName" required type="text" placeholder="e.g. HDFC Bank" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                <input 
+                  name="bankName" 
+                  required 
+                  type="text" 
+                  defaultValue={editingBank?.bankName}
+                  placeholder="e.g. HDFC Bank" 
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Account Holder Name</label>
-                <input name="accountName" required type="text" placeholder="e.g. DigiWorld Infotech" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                <input 
+                  name="accountName" 
+                  required 
+                  type="text" 
+                  defaultValue={editingBank?.accountName}
+                  placeholder="e.g. DigiWorld Infotech" 
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Account Number</label>
-                <input name="accountNumber" required type="text" placeholder="Account Number" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                <input 
+                  name="accountNumber" 
+                  required 
+                  type="text" 
+                  defaultValue={editingBank?.accountNumber}
+                  placeholder="Account Number" 
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">IFSC Code</label>
-                  <input name="ifsc" required type="text" placeholder="IFSC" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="ifsc" 
+                    required 
+                    type="text" 
+                    defaultValue={editingBank?.ifsc}
+                    placeholder="IFSC" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Opening Balance (₹)</label>
-                  <input name="balance" type="number" placeholder="0.00" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                  <input 
+                    name="balance" 
+                    type="number" 
+                    defaultValue={editingBank?.balance}
+                    placeholder="0.00" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                  />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Branch Name</label>
-                <input name="branch" required type="text" placeholder="Branch Name" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
+                <input 
+                  name="branch" 
+                  required 
+                  type="text" 
+                  defaultValue={editingBank?.branch}
+                  placeholder="Branch Name" 
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
+                />
               </div>
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-all">Cancel</button>
-                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">Save Account</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingBank(null);
+                  }} 
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">
+                  {editingBank ? 'Update Account' : 'Save Account'}
+                </button>
               </div>
             </form>
           </div>

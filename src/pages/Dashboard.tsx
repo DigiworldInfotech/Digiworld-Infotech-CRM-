@@ -30,8 +30,20 @@ import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'd
 import { useAuth } from '../contexts/AuthContext';
 import ClientDashboard from './ClientDashboard';
 
+import SalesDashboard from '../components/SalesDashboard';
+import AccountantDashboard from '../components/AccountantDashboard';
+
+import { runAutomatedChecks } from '../services/automation';
+
 const Dashboard: React.FC = () => {
-  const { isClient } = useAuth();
+  const { isClient, isSales, isAccountant, isAdmin } = useAuth();
+
+  useEffect(() => {
+    if (isAdmin) {
+      runAutomatedChecks();
+    }
+  }, [isAdmin]);
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -56,7 +68,7 @@ const Dashboard: React.FC = () => {
       unsubExpenses();
       unsubBanks();
     };
-  }, []);
+  }, [isClient]);
 
   // Stats calculations
   const totalRevenue = invoices
@@ -72,9 +84,6 @@ const Dashboard: React.FC = () => {
     .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   const activeClients = clients.filter(c => c.status === 'active').length;
-  const leadConversionRate = leads.length > 0 
-    ? ((leads.filter(l => l.status === 'won').length / leads.length) * 100).toFixed(1)
-    : 0;
 
   // Chart data: Monthly Revenue
   const last6Months = Array.from({ length: 6 }).map((_, i) => {
@@ -106,6 +115,10 @@ const Dashboard: React.FC = () => {
   const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f43f5e'];
   
   if (isClient) return <ClientDashboard />;
+  
+  // Role-specific views
+  if (isSales && !isAdmin) return <SalesDashboard leads={leads} />;
+  if (isAccountant && !isAdmin) return <AccountantDashboard invoices={invoices} expenses={expenses} banks={banks} payments={payments} />;
 
   return (
     <div className="space-y-8">
@@ -232,10 +245,12 @@ const Dashboard: React.FC = () => {
                   <td className="px-6 py-4 font-semibold text-slate-900">₹{inv.totalAmount.toLocaleString()}</td>
                   <td className="px-6 py-4">
                     <span className={cn(
-                      "px-2.5 py-1 rounded-full text-xs font-medium capitalize",
+                      "px-2.5 py-1 rounded-full text-xs font-bold capitalize",
                       inv.status === 'paid' ? "bg-emerald-50 text-emerald-600" :
                       inv.status === 'overdue' ? "bg-rose-50 text-rose-600" :
-                      "bg-amber-50 text-amber-600"
+                      inv.status === 'sent' ? "bg-blue-50 text-blue-600" :
+                      inv.status === 'cancelled' ? "bg-slate-100 text-slate-400 line-through" :
+                      "bg-slate-50 text-slate-500"
                     )}>
                       {inv.status}
                     </span>

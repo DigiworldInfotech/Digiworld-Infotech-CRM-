@@ -21,7 +21,10 @@
       "properties": {
         "title": { "type": "string" },
         "status": { "type": "string", "enum": ["new", "contacted", "meeting_scheduled", "proposal_sent", "negotiation", "won", "lost"] },
-        "source": { "type": "string" },
+        "source": { 
+          "type": "string", 
+          "enum": ["website", "referral", "linkedin", "cold_call", "google_my_business", "youtube", "facebook", "instagram", "whatsapp", "other"] 
+        },
         "assignedTo": { "type": "string", "description": "User UID" },
         "contactName": { "type": "string" },
         "contactEmail": { "type": "string" },
@@ -98,7 +101,9 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "isRecurring": { "type": "boolean" },
         "recurringInterval": { "type": "string", "enum": ["monthly", "quarterly", "yearly"] },
-        "lastRecurringDate": { "type": "string", "format": "date-time" }
+        "lastRecurringDate": { "type": "string", "format": "date-time" },
+        "lastReminderSentAt": { "type": "string", "format": "date-time" },
+        "reminderCount": { "type": "number" }
       },
       "required": ["invoiceNumber", "clientId", "totalAmount", "status", "createdAt"]
     },
@@ -111,6 +116,8 @@
         "amount": { "type": "number" },
         "date": { "type": "string", "format": "date-time" },
         "mode": { "type": "string" },
+        "servicePeriodFrom": { "type": "string", "format": "date-time" },
+        "servicePeriodTo": { "type": "string", "format": "date-time" },
         "notes": { "type": "string" }
       },
       "required": ["invoiceId", "amount", "date"]
@@ -143,7 +150,8 @@
         "upiId": { "type": "string" },
         "bankDetails": { "type": "string" },
         "termsAndConditions": { "type": "string" },
-        "paymentUrl": { "type": "string" }
+        "paymentUrl": { "type": "string" },
+        "overdueReminderSchedule": { "type": "string" }
       }
     },
     "Bank": {
@@ -171,6 +179,8 @@
         "vendor": { "type": "string" },
         "mode": { "type": "string" },
         "bankId": { "type": "string" },
+        "servicePeriodFrom": { "type": "string", "format": "date-time" },
+        "servicePeriodTo": { "type": "string", "format": "date-time" },
         "notes": { "type": "string" },
         "gstAmount": { "type": "number" },
         "isGstClaimable": { "type": "boolean" }
@@ -182,7 +192,7 @@
       "description": "Custom email templates.",
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["welcome", "invoice", "recurring", "followup"] },
+        "type": { "type": "string", "enum": ["welcome", "invoice", "recurring", "followup", "overdue"] },
         "subject": { "type": "string" },
         "body": { "type": "string" },
         "lastUpdated": { "type": "string", "format": "date-time" }
@@ -235,6 +245,41 @@
         "userName": { "type": "string" }
       },
       "required": ["clientId", "type", "subject", "content", "date", "userId"]
+    },
+    "Estimate": {
+      "title": "Estimate",
+      "description": "Client quotation / estimate data.",
+      "type": "object",
+      "properties": {
+        "estimateNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "serviceId": { "type": "string" },
+              "serviceName": { "type": "string" },
+              "hsn": { "type": "string" },
+              "qty": { "type": "number" },
+              "rate": { "type": "number" },
+              "gstRate": { "type": "number" },
+              "amount": { "type": "number" }
+            }
+          }
+        },
+        "subtotal": { "type": "number" },
+        "gstAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "sent", "accepted", "rejected", "expired"] },
+        "validUntil": { "type": "string", "format": "date-time" },
+        "servicePeriodFrom": { "type": "string", "format": "date-time" },
+        "servicePeriodTo": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["estimateNumber", "clientId", "clientName", "totalAmount", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -243,6 +288,7 @@
     "clients": { "schema": "Client", "description": "Customer master" },
     "services": { "schema": "Service", "description": "Billed services" },
     "invoices": { "schema": "Invoice", "description": "GST Invoices" },
+    "estimates": { "schema": "Estimate", "description": "Client quotations" },
     "payments": { "schema": "Payment", "description": "Payment transactions" },
     "expenses": { "schema": "Expense", "description": "Business expenses" },
     "banks": { "schema": "Bank", "description": "Bank accounts" },
@@ -251,6 +297,7 @@
     "activityLogs": { "schema": "ActivityLog", "description": "Audit logs" },
     "settings": { "schema": "CompanySettings", "description": "Global config" },
     "projects": { "schema": "Project", "description": "Client projects" },
-    "communications": { "schema": "Communication", "description": "Communication history" }
+    "communications": { "schema": "Communication", "description": "Communication history" },
+    "system_state": { "schema": "object", "description": "Global application state tracking" }
   }
 }

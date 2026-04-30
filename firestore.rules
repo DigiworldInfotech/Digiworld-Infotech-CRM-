@@ -118,6 +118,11 @@ service cloud.firestore {
       allow write: if isAuthenticated() && (isAdmin() || isAccountant());
     }
 
+    match /estimates/{estimateId} {
+      allow read: if isAuthenticated() && (isAdmin() || isAccountant() || isSales() || getClientUID() == resource.data.clientId);
+      allow write: if isAuthenticated() && (isAdmin() || isSales());
+    }
+
     match /payments/{paymentId} {
       allow read: if isAuthenticated() && (isAdmin() || isAccountant());
       allow write: if isAuthenticated() && (isAdmin() || isAccountant());
@@ -163,6 +168,11 @@ service cloud.firestore {
     match /communications/{commId} {
       allow read: if isAuthenticated() && (isAdmin() || isSales() || isAccountant() || getClientUID() == resource.data.clientId);
       allow write: if isAuthenticated() && (isAdmin() || isSales());
+    }
+
+    match /system_state/{stateId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isAdmin() || isSales() || isAccountant());
     }
   }
 }

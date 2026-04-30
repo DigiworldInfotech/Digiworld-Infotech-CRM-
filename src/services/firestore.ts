@@ -106,7 +106,7 @@ export const updateDocument = async <T extends object>(path: string, id: string,
   }
 };
 
-export const removeDocument = async (path: string, id: string) => {
+export const deleteDocument = async (path: string, id: string) => {
   try {
     const docRef = doc(db, path, id);
     await deleteDoc(docRef);

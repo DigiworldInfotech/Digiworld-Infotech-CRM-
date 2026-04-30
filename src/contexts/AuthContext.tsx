@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, query, collection, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { UserProfile } from '../types';
 
@@ -41,16 +41,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (docSnap.exists()) {
           setProfile(docSnap.data() as UserProfile);
         } else {
-          // Create default profile for first time login
-          const newProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email || '',
-            name: user.displayName || 'User',
-            role: user.email === 'admin@digiworldinfotech.in' ? 'super_admin' : 'sales',
-            photoURL: user.photoURL || undefined,
-          };
-          await setDoc(docRef, newProfile);
-          setProfile(newProfile);
+          // Check if there's a pre-registered profile by email
+          const q = query(collection(db, 'users'), where('email', '==', user.email));
+          const querySnap = await getDocs(q);
+          
+          if (!querySnap.empty) {
+            // Found a pre-registered profile
+            const existingData = querySnap.docs[0].data() as UserProfile;
+            const existingId = querySnap.docs[0].id;
+            
+            const linkedProfile: UserProfile = {
+              ...existingData,
+              uid: user.uid, // Link to real Firebase Auth UID
+              photoURL: user.photoURL || existingData.photoURL,
+            };
+            
+            // Delete the temporary record and create the real one
+            await deleteDoc(doc(db, 'users', existingId));
+            await setDoc(docRef, linkedProfile);
+            setProfile(linkedProfile);
+          } else {
+            // Create default profile for first time login
+            const newProfile: UserProfile = {
+              uid: user.uid,
+              email: user.email || '',
+              name: user.displayName || 'User',
+              role: user.email === 'admin@digiworldinfotech.in' ? 'super_admin' : (user.email === 'digiworldinfotechs@gmail.com' ? 'accountant' : 'sales'),
+              photoURL: user.photoURL || undefined,
+            };
+            await setDoc(docRef, newProfile);
+            setProfile(newProfile);
+          }
         }
 
         // Initialize company settings if they don't exist

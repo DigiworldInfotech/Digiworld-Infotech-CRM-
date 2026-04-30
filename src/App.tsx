@@ -7,12 +7,14 @@ import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import Clients from './pages/Clients';
 import Services from './pages/Services';
+import Estimates from './pages/Estimates';
 import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
 import Expenses from './pages/Expenses';
 import Banks from './pages/Banks';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Users from './pages/Users';
 
 export default function App() {
   return (
@@ -26,9 +28,11 @@ export default function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
+            <Route path="users" element={<Users />} />
             <Route path="leads" element={<Leads />} />
             <Route path="clients" element={<Clients />} />
             <Route path="services" element={<Services />} />
+            <Route path="estimates" element={<Estimates />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="payments" element={<Payments />} />
             <Route path="expenses" element={<Expenses />} />

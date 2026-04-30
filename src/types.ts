@@ -7,12 +7,16 @@ export interface UserProfile {
   name: string;
   photoURL?: string;
   clientId?: string;
+  username?: string;
+  lastLogin?: string;
 }
 
 export interface Lead {
   id: string;
   title: string;
   status: 'new' | 'contacted' | 'meeting_scheduled' | 'proposal_sent' | 'negotiation' | 'won' | 'lost';
+  priority: 'low' | 'medium' | 'high';
+  budget: number;
   source: string;
   assignedTo: string;
   contactName: string;
@@ -46,6 +50,8 @@ export interface Service {
   gstRate: number;
   price: number;
   isRecurring: boolean;
+  description?: string;
+  features?: string[];
 }
 
 export interface InvoiceItem {
@@ -75,16 +81,42 @@ export interface Invoice {
   createdAt: string;
   isRecurring: boolean;
   recurringInterval?: 'monthly' | 'quarterly' | 'yearly';
+  recurringParentId?: string;
+  recurringGeneratedForDate?: string;
   lastRecurringDate?: string;
+  lastReminderSentAt?: string;
+  reminderCount?: number;
+  servicePeriodFrom?: string;
+  servicePeriodTo?: string;
+}
+
+export interface Estimate {
+  id?: string;
+  estimateNumber: string;
+  clientId: string;
+  clientName: string;
+  items: InvoiceItem[];
+  subtotal: number;
+  gstAmount: number;
+  totalAmount: number;
+  status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+  validUntil: string;
+  servicePeriodFrom?: string;
+  servicePeriodTo?: string;
+  createdAt: string;
+  notes?: string;
 }
 
 export interface Payment {
   id: string;
   invoiceId: string;
+  invoiceNumber?: string;
   amount: number;
   date: string;
   mode: 'Cash' | 'UPI' | 'RTGS' | 'Cheque' | 'Card' | 'Other';
   bankId?: string;
+  servicePeriodFrom?: string;
+  servicePeriodTo?: string;
   notes: string;
 }
 
@@ -106,6 +138,8 @@ export interface Expense {
   vendor: string;
   paymentMode: 'Cash' | 'UPI' | 'RTGS' | 'Cheque' | 'Card' | 'Other';
   bankId?: string;
+  servicePeriodFrom?: string;
+  servicePeriodTo?: string;
   notes: string;
   gstAmount?: number;
   isGstClaimable: boolean;
@@ -123,6 +157,8 @@ export interface CompanySettings {
   bankDetails?: string;
   termsAndConditions?: string;
   paymentUrl?: string;
+  overdueReminderSchedule?: string; // Comma separated days e.g. "1,3,7,14"
+  emailSignature?: string;
 }
 
 export interface ActivityLog {
@@ -136,7 +172,7 @@ export interface ActivityLog {
 
 export interface EmailTemplate {
   id: string;
-  type: 'welcome' | 'invoice' | 'recurring' | 'followup';
+  type: 'welcome' | 'invoice' | 'recurring' | 'followup' | 'overdue' | 'estimate';
   subject: string;
   body: string;
   lastUpdated: string;
